@@ -29,3 +29,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
+    confirm_new_password = serializers.CharField(min_length=8)
