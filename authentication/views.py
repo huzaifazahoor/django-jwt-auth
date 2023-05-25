@@ -3,7 +3,13 @@ from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
-from .serializers import UserSerializer
+from .serializers import UserSerializer, PasswordResetSerializer
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.sites.shortcuts import get_current_site
+from django.contrib.auth.tokens import default_token_generator
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes
+from django.core.mail import send_mail
 
 User = get_user_model()
 
@@ -73,3 +79,44 @@ def user_login(request):
         "access": str(refresh.access_token),
     }
     return Response(data, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def password_reset(request):
+    serializer = PasswordResetSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data["email"]
+        users = User.objects.filter(email=email)
+        if users:
+            for user in users:
+                token = default_token_generator.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                current_site = get_current_site(request)
+                mail_subject = "Reset your password"
+                message = render_to_string(
+                    "password_reset_email.html",
+                    {
+                        "user": user,
+                        "domain": current_site.domain,
+                        "uid": uid,
+                        "token": token,
+                    },
+                )
+                send_mail(
+                    mail_subject,
+                    message,
+                    "admin@mywebsite.com",
+                    [email],
+                )
+            return Response(
+                {"detail": "Password reset e-mail has been sent."},
+                status=200,
+            )
+        else:
+            return Response(
+                {"detail": "No user found with this email address."},
+                status=400,
+            )
+    else:
+        return Response(serializer.errors, status=400)
